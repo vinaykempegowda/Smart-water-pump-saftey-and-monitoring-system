@@ -1,1 +1,1 @@
-# Smart-water-pump-saftey-and-monitoring-system
+# Smart water pump saftey and monitoring system
