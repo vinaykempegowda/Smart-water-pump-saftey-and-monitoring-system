@@ -4,3 +4,5 @@ The Smart Water Pump Safety and Monitoring System is an IoT-based solution aimed
 Develop an IoT-enabled smart system to monitor and control water pumps remotely using sensors, GPS, and the Blynk mobile application for improved user convenience and automation.
 Ensure safety and operational efficiency by automatically managing pump activity based on environmental conditions like water level, rain detection, and motor temperature to prevent damage and reduce energy usage.
 Enhance security and reliability by integrating theft detection through tilt sensors and real-time location tracking using GPS, along with instant alerts for any anomalies or malfunctions.
+# Methodology
+## Block Diagram
