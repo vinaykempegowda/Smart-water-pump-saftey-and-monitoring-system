@@ -1,0 +1,364 @@
+#define BLYNK_TEMPLATE_ID "TMPL36csDPUgR"
+#define BLYNK_TEMPLATE_NAME "WATER PUMP SAFETY AND MONITORING SYSTEM"
+#define BLYNK_AUTH_TOKEN "DZuFkwdjnsnFzeeRGRSTqkLGeeyWy80P"
+
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+// GPS setup
+static const int RXPin = D7; // Connect to TX of Neo-6M
+static const int TXPin = D8; // Connect to RX of Neo-6M
+static const uint32_t GPSBaud = 9600; // Default baud rate of Neo-6M
+
+// Create GPS object
+TinyGPSPlus gps;
+SoftwareSerial gpsSerial(RXPin, TXPin);
+
+// WiFi credentials
+const char *ssid = "Rohan";  
+const char *password = "i523m1bm";  
+
+// Google Maps API Key
+String GMAP_API_KEY = "AIzaSyCEfhdK6agreruP9iW8i_4PqbR64-jhz_g";
+
+// Web server setup
+WiFiServer server(80);
+
+// Initialize variables for GPS data
+String latitude = "";
+String longitude = "";
+String altitude = "";
+String satelliteCount = "";
+String googleMapsLink = "";
+String html = "";
+
+// Blynk authentication token
+
+// Pin Definitions
+#define LM35_POWER_PIN D1
+#define WATER_POWER_PIN D2
+#define RAIN_POWER_PIN D5
+#define RELAY_PIN D4
+#define TILT_INPUT_PIN D3
+#define WATER_THRESHOLD 50
+#define TEMP_THRESHOLD 25.0
+#define RAIN_THRESHOLD 300
+#define ANALOG_PIN A0
+
+// Blynk virtual pins
+#define VIRTUAL_TEMP_PIN V1
+#define VIRTUAL_WATER_PIN V2
+#define VIRTUAL_RAIN_PIN V3
+#define VIRTUAL_PUMP_BUTTON V4
+#define VIRTUAL_TILT_PIN V5 
+#define VIRTUAL_PUMP_CONTROL V6 
+
+bool manualControl = false;
+void setup() {
+  Serial.begin(115200);  // Start serial communication for debugging
+  gpsSerial.begin(GPSBaud); // GPS serial
+
+  // Connect to Wi-Fi
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Start web server
+  server.begin();
+
+  // Connect to Blynk
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
+
+  // Set sensor power pins as outputs
+  pinMode(LM35_POWER_PIN, OUTPUT);
+  pinMode(WATER_POWER_PIN, OUTPUT);
+  pinMode(RAIN_POWER_PIN, OUTPUT);
+
+  // Set relay and tilt sensor pins
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(TILT_INPUT_PIN, INPUT);
+
+  // Initially turn OFF all sensors and the pump
+  digitalWrite(LM35_POWER_PIN, LOW);
+  digitalWrite(WATER_POWER_PIN, LOW);
+  digitalWrite(RAIN_POWER_PIN, LOW);
+  digitalWrite(RELAY_PIN, HIGH); // Turn off pump initially
+}
+
+void displayGPSInfo() {
+  if (gps.location.isValid()) {
+    latitude = String(gps.location.lat(), 6);
+    longitude = String(gps.location.lng(), 6);
+    altitude = String(gps.altitude.meters());
+    googleMapsLink = "https://www.google.com/maps?q=" + latitude + "," + longitude;
+  } else {
+    latitude = "Waiting for GPS signal...";
+    longitude = "Waiting for GPS signal...";
+    altitude = "Waiting for GPS signal...";
+    googleMapsLink = "#";
+  }
+
+  // Satellite information
+  if (gps.satellites.isValid()) {
+    satelliteCount = String(gps.satellites.value());
+  } else {
+    satelliteCount = "N/A";
+  }
+
+  // Print the data to the Serial Monitor
+  Serial.print("Latitude: ");
+  Serial.print(latitude);
+  Serial.print(", Longitude: ");
+  Serial.print(longitude);
+  Serial.print(", Altitude: ");
+  Serial.println(altitude);
+  Serial.print("Satellite Count: ");
+  Serial.println(satelliteCount);
+  Serial.print("Google Maps Link: ");
+  Serial.println(googleMapsLink);
+}
+void controlWaterPump(float temperature, int scaledWaterLevel, bool isTilted, bool isRaining) {
+  // Manual control bypass logic
+  if (manualControl) {
+    // When manual control is enabled, directly rely on Blynk write logic
+    Serial.println("Manual control active. Automated logic bypassed.");
+    return; // Exit the function to skip automated logic
+  }
+
+  // Automated control logic (only when manual control is disabled)
+  if (temperature > TEMP_THRESHOLD) {
+    Serial.println("Motor turned OFF: Temperature exceeded threshold.");
+    digitalWrite(RELAY_PIN, HIGH); // Turn off pump
+    Blynk.virtualWrite(VIRTUAL_PUMP_BUTTON, LOW); // Set button to OFF
+  } else if (scaledWaterLevel < WATER_THRESHOLD) {
+    Serial.println("Motor turned OFF: Water level below threshold.");
+    digitalWrite(RELAY_PIN, HIGH); // Turn off pump
+    Blynk.virtualWrite(VIRTUAL_PUMP_BUTTON, LOW); // Set button to OFF
+  } else if (!isTilted) {
+    Serial.println("Motor turned OFF: Tilt sensor activated.");
+    digitalWrite(RELAY_PIN, HIGH); // Turn off pump
+    Blynk.virtualWrite(VIRTUAL_PUMP_BUTTON, LOW); // Set button to OFF
+  } else if (!isRaining) {
+    Serial.println("Motor turned OFF: Rain sensor below threshold.");
+    digitalWrite(RELAY_PIN, HIGH); // Turn off pump
+    Blynk.virtualWrite(VIRTUAL_PUMP_BUTTON, LOW); // Set button to OFF
+  } else {
+    Serial.println("Motor turned ON: All conditions met.");
+    digitalWrite(RELAY_PIN, LOW);  // Turn on pump
+    Blynk.virtualWrite(VIRTUAL_PUMP_BUTTON, HIGH); // Set button to ON
+  }
+}
+
+BLYNK_WRITE(VIRTUAL_PUMP_CONTROL) {
+  manualControl = param.asInt(); // Read the switch value from Blynk app (0 = OFF, 1 = ON)
+  if (manualControl) {
+    digitalWrite(RELAY_PIN, LOW); // Turn on the pump
+    Blynk.virtualWrite(VIRTUAL_PUMP_BUTTON, HIGH); // Update the pump button status
+    Serial.println("Pump manually turned ON via Blynk.");
+  } else {
+    digitalWrite(RELAY_PIN, HIGH); // Turn off the pump
+    Blynk.virtualWrite(VIRTUAL_PUMP_BUTTON, LOW); // Update the pump button status
+    Serial.println("Pump manually turned OFF via Blynk.");
+  }
+}
+
+
+float readTemperature() {
+  digitalWrite(LM35_POWER_PIN, HIGH);
+  delay(100);
+  int lm35Value = analogRead(ANALOG_PIN);
+  float temperature = (lm35Value * 3.3 / 1023.0) * 100.0;
+  digitalWrite(LM35_POWER_PIN, LOW);
+  delay(100);
+  return temperature;
+}
+
+int readWaterLevel() {
+  digitalWrite(WATER_POWER_PIN, HIGH);
+  delay(100);
+  int waterValue = analogRead(ANALOG_PIN);
+  digitalWrite(WATER_POWER_PIN, LOW);
+  delay(100);
+
+  // Convert water level to percentage (assuming the max value is 1023)
+  int waterPercentage = map(waterValue, 0,350 , 0, 30); // Scale to 0-30%
+  int scaledWaterLevel = map(waterPercentage, 0, 30, 0, 100);
+  return scaledWaterLevel;
+}
+
+bool readRainSensor() {
+  return digitalRead(D0); // Read digital value from D0
+}
+
+
+bool readTiltSensor() {
+  return digitalRead(TILT_INPUT_PIN);
+}
+
+void sendTiltEventAndNotification(bool isTilted) {
+  if (!isTilted) {
+    Blynk.virtualWrite(VIRTUAL_TILT_PIN, 1);  // Set tilt state to 1 (tilted)
+  } else {
+    Blynk.virtualWrite(VIRTUAL_TILT_PIN, 0);  // Set tilt state to 0 (not tilted)
+  }
+}
+
+void serveWebPage() {
+  WiFiClient client = server.available();
+  if (client) {
+    Serial.println("New client connected");
+    String currentLine = "";
+
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        if (c == '\n') {
+          // If the current line is empty, send the HTML page
+          if (currentLine.length() == 0) {
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-Type: text/html");
+            client.println("Connection: close");
+            client.println();
+
+            // HTML content with Google Maps integration
+            html = "<!DOCTYPE html>";
+            html += "<html lang='en'>";
+            html += "<head>";
+            html += "<meta charset='UTF-8'>";
+            html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+            html += "<meta http-equiv='X-UA-Compatible' content='ie=edge'>";
+            html += "<title>My Google Map</title>";
+            html += "<style>#map{height:400px;width:100%;}</style>";
+            html += "</head>";
+            html += "<body>";
+            html += "<h1>GPS Location and Google Map</h1>";
+            html += "<p>Latitude: " + latitude + "</p>";
+            html += "<p>Longitude: " + longitude + "</p>";
+            html += "<p>Altitude: " + altitude + " meters</p>";
+            html += "<p>Satellite Count: " + satelliteCount + "</p>";
+            html += "<p>Google Maps Link: <a href='" + googleMapsLink + "' target='_blank'>Open in Google Maps</a></p>";
+            html += "<div id='map'></div>";
+            html += "<script>";
+
+            // JavaScript for Google Maps
+            html += "var map;";
+            html += "var marker;";
+            html += "var INTERVAL = 5000;";  // Set interval for updating GPS coordinates
+            html += "function initMap(){";
+            html += "var options = {";
+            html += "zoom: 16,";
+            html += "center: {lat: " + latitude + ", lng: " + longitude + "},";
+            html += "mapTypeId: google.maps.MapTypeId.ROADMAP,";
+            html += "};";
+            html += "map = new google.maps.Map(document.getElementById('map'), options);";
+            html += "}";
+            
+            html += "function getMarkers() {";
+            html += "var newLatLng = new google.maps.LatLng(" + latitude + ", " + longitude + ");";
+            html += "marker = new google.maps.Marker({";
+            html += "position: newLatLng,";
+            html += "map: map";
+            html += "});";
+            html += "}";
+
+            html += "window.setInterval(getMarkers, INTERVAL);";  // Call getMarkers function at intervals
+
+            html += "</script>";
+            html += "<script async defer src='https://maps.googleapis.com/maps/api/js?key=" + GMAP_API_KEY + "&callback=initMap'></script>";
+            html += "</body>";
+            html += "</html>";
+
+            // Send HTML response to client
+            client.print(html);
+
+            // The HTTP response ends with another blank line
+            client.println();
+            break;
+          } else {
+            currentLine = "";
+          }
+        } else if (c != '\r') {
+          currentLine += c;
+        }
+      }
+    }
+    client.stop();
+    Serial.println("Client disconnected");
+  }
+}
+
+void displaySensorStatus(float temperature, int scaledWaterLevel, bool isTilted, bool isRaining) {
+ // Temperature
+  Serial.print("Temperature: ");
+  Serial.println(temperature > TEMP_THRESHOLD ? "Above Threshold(PUMP OFF)" : "Normal(PUMP OK)");
+
+  // Water Level
+  Serial.print("Water Level: ");
+  Serial.println(scaledWaterLevel < WATER_THRESHOLD ? "Below Threshold(PUMP OFF)" : "Normal(PUMP OK)");
+
+  Serial.print("Tilt Sensor: ");
+  Serial.println(isTilted ? "Not Tilted" : "Tilted");
+
+  Serial.print("Rain Sensor: ");
+  Serial.println(isRaining ? "Rain Detected" : "No Rain Detected");
+
+  Serial.println("-------------------------------");
+}
+
+
+void loop() {
+  Blynk.run();  // Blynk processing
+
+  // Read data from GPS
+  while (gpsSerial.available() > 0) {
+    if (gps.encode(gpsSerial.read())) {
+      displayGPSInfo();
+      serveWebPage();
+    }
+  }
+
+  // Read sensors
+  float temperature = readTemperature();
+  //int waterLevel = readWaterLevel();
+  bool isRaining = readRainSensor();
+  bool isTilted = readTiltSensor();
+  int scaledWaterLevel = readWaterLevel();
+  // Display sensor statuses on Serial Monitor
+  //Serial.println("---- Sensor Status ----");
+
+  displaySensorStatus(temperature, scaledWaterLevel, isTilted, isRaining);
+
+  
+  // Temperature
+ if (!isRaining) {
+    Blynk.virtualWrite(VIRTUAL_RAIN_PIN, 1);  // Set tilt state to 1 (tilted)
+  } else {
+    Blynk.virtualWrite(VIRTUAL_RAIN_PIN, 0);  // Set tilt state to 0 (not tilted)
+  }
+
+ // Serial.println("-----------------------");
+
+  // Control the water pump based on sensor readings
+
+
+  // Send sensor data to Blynk app
+  Blynk.virtualWrite(VIRTUAL_TEMP_PIN, temperature);
+  Blynk.virtualWrite(VIRTUAL_WATER_PIN, scaledWaterLevel);
+  //Blynk.virtualWrite(VIRTUAL_RAIN_PIN, rainValue);
+
+  // Send tilt event and notification if the tilt sensor is activated
+  sendTiltEventAndNotification(isTilted);
+  controlWaterPump(temperature, scaledWaterLevel, isTilted, isRaining);
+
+  delay(1000);  // Delay before the next loop
+
+  }
