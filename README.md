@@ -8,6 +8,7 @@ Enhance security and reliability by integrating theft detection through tilt sen
 ## Methodology
 The Smart Water Pump Safety and Monitoring System is implemented using a combination of hardware components and software integration to achieve automated control, safety, and remote accessibility. The ESP8266 microcontroller serves as the core unit, interfacing with sensors and handling wireless communication via Wi-Fi. A variety of sensors are used to monitor key parameters: a rain sensor detects rainfall to turn off the pump, a temperature sensor protects the motor from overheating, a water level sensor ensures timely water refilling, and a tilt sensor detects unauthorized movement, indicating possible theft. A GPS module is included to track the pump's location in case of tampering or theft. The system is connected to the Blynk mobile application, allowing users to monitor and control the pump remotely while receiving real-time notifications and alerts. This integration ensures continuous monitoring and intelligent decision-making, significantly reducing the need for manual intervention and enhancing the reliability and safety of the water pumping system.
 ### Block Diagram
+![image](https://github.com/user-attachments/assets/16fe81d6-1d8a-463d-a87b-407fea568d2f)
 ### Circuit Diagram
 ![WhatsApp Image 2025-05-31 at 12 25 02_f73c8c18](https://github.com/user-attachments/assets/5306f411-af35-417e-9fd4-03cae78041a8)
 # Result
