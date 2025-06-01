@@ -21,10 +21,6 @@ The Smart Water Pump Safety and Monitoring System is implemented using a combina
 
  ### Block Diagram
 ![image](https://github.com/user-attachments/assets/16fe81d6-1d8a-463d-a87b-407fea568d2f)
-</details>
-<details>
-<summary><h2> Abstract </h2> </summary>
-<br>
 
 ### Circuit Diagram
 ![WhatsApp Image 2025-05-31 at 12 25 02_f73c8c18](https://github.com/user-attachments/assets/5306f411-af35-417e-9fd4-03cae78041a8)
